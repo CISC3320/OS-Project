@@ -16,7 +16,7 @@ public class os{
 		sos.ontrace();
 		jobsInDrum=new LinkedList<Job>();
 		freeSpaceTable=new LinkedList<FreeSpaceEntry>();
-		freeSpaceTable.add(new FreeSpaceEntree(0,100));//start up free space table to contain one free space of 100k, at block 0 
+		freeSpaceTable.add(new FreeSpaceEntry(0,100));//start up free space table to contain one free space of 100k, at block 0 
 		cpuQueue=new LinkedList<Job>();
 		diskQueue=new LinkedList<Job>();
 		cpuRunningJob=false;
