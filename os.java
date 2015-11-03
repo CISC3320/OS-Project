@@ -3,7 +3,7 @@ import java.lang.System.*;
 
 public class os{
 	static LinkedList<Job> jobsInDrum;//is a list of jobs in the drum
-	static LinkedList<FreeSpaceEntree> freeSpaceTable;//is a list of free spaces entrees
+	static LinkedList<FreeSpaceEntry> freeSpaceTable;//is a list of free spaces entrees
 	static Queue<Job> cpuQueue;//a queue of jobs on the cpuQueue
 	static boolean cpuRunningJob;//true or false whether a job is using the cpu at the moment
 	static Job jobOnCPU;//contains the job that is currently using the cpu
@@ -15,7 +15,7 @@ public class os{
 	static void startup(){
 		sos.ontrace();
 		jobsInDrum=new LinkedList<Job>();
-		freeSpaceTable=new LinkedList<FreeSpaceEntree>();
+		freeSpaceTable=new LinkedList<FreeSpaceEntry>();
 		freeSpaceTable.add(new FreeSpaceEntree(0,100));//start up free space table to contain one free space of 100k, at block 0 
 		cpuQueue=new LinkedList<Job>();
 		diskQueue=new LinkedList<Job>();
