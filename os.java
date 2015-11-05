@@ -7,7 +7,9 @@ public class os{
 	static LinkedList<FreeSpaceEntry> freeSpaceTable;//is a list of free spaces entrees
 	static Queue<Job> cpuQueue;//a queue of jobs on the cpuQueue
 	static boolean cpuRunningJob;//true or false whether a job is using the cpu at the moment
+	static boolean ioRunningJob; //true or false to indicate whether a job is using IO
 	static Job jobOnCPU;//contains the job that is currently using the cpu
+	static LinkedList<Job> jobsBeingSwapped;
 	//static Job jobOnDisk;//contains the current job that is running I/O on the disk //Will be removed. Current job will always be top of queue
 	static Queue<Job> diskQueue;//contains jobs that are waiting to use the disk for I/O
 
@@ -17,6 +19,7 @@ public class os{
 		sos.ontrace();
 		jobsInDrum=new LinkedList<Job>();
 		jobsInMemory = new HashMap<Integer, Job>();
+		jobsBeingSwapped = new LinkedList<Job>();
 		freeSpaceTable=new LinkedList<FreeSpaceEntry>();
 		freeSpaceTable.add(new FreeSpaceEntry(0,100));//start up free space table to contain one free space of 100k, at block 0 
 		cpuQueue=new LinkedList<Job>();
@@ -42,13 +45,20 @@ public class os{
 	//diskQueue works in FCFS
 	static void Dskint(int []a, int []p){
 		//@AR Job at tob of I/O (DISK Queue) finished I/O
-		
-		/*cpuQueue.add(jobOnDisk);
-		if(diskQueue.size()!=0){
-			jobOnDisk=diskQueue.peek();
-			sos.siodisk(diskQueue.poll().jobNumber);
-		}*/
-		System.out.println("TEST");
+		if(ioRunningJob){
+			Job job = diskQueue.poll();	//Remove the last executed I/O job
+			if(job.blocked && !diskQueue.contains(job)){
+				//If this job was previously blocked until all I/O was completed, we will unblock now
+				job.blocked = false;
+			}
+		}
+		if(diskQueue.size() > 0){
+			Job nextJob = diskQueue.peek();
+			ioRunningJob = true;
+			sos.siodisk(nextJob.jobNumber);
+		}else{
+			ioRunningJob = false;
+		}
 	}
 
 
@@ -59,8 +69,13 @@ public class os{
 	static void Drmint(int []a, int []p){
 		//@Ar successfuly brought job to Drum
 		//p[5] is the current time of the job
-		tryMovingJobToMemory();
-		scheduler(a,p);
+		Job job = jobsBeingSwapped.remove();
+		FreeSpaceEntry.deleteEntry(job.block, job.jobSize, freeSpaceTable);
+		job.usedTime = p[5];
+		cpuQueue.add(job);
+		jobsInMemory.put(job.jobNumber, job);
+		tryMovingJobToMemory();	//Try Moving the next job
+		scheduler(a,p);			//try scheduling the job
 	}
 
 	
@@ -68,7 +83,18 @@ public class os{
 	//will be later edited for dealing with time sliced
 	//for now will be called when a process finishes with the cpu and wants to terminate, since the scheduler is in FCFS
 	static void Tro(int []a, int []p){
-		System.out.println("Time Limit Reached");
+		Job job = cpuQueue.peek();
+		if(job != null){
+			if(p[5] >= job.maxCPUTime){
+				//Job has used the maximum CPU TIME
+				terminate (job.jobNumber);
+			}else{
+				//Job has used its current timeslice
+				cpuQueue.poll();	//remove from top of the queue
+				cpuQueue.add(job);	//add at tail of the queue
+				//TODO:SCHEDULE NEXT JOB
+			}
+		}
 	}
 
 	//stands for supervisor call
@@ -79,17 +105,15 @@ public class os{
 	static void Svc(int []a, int []p){
 		cpuRunningJob=false;	
 		if(a[0]==5){
-			//TerminationCode
-			terminate(p[1]);
+			terminate(cpuQueue.peek().jobNumber);
 		}
 		else if(a[0]==6){
 			diskQueue.add(jobOnCPU);//add job on cpu to diskQueue
-						//WILL BE REMOVED
-                        //jobOnDisk=diskQueue.poll();//save top of diskQeueu to jobOnDisk(the job that is going to run on the disk right now)
-						//?????
-			             //@AR: We will do this when diskIntOccurs          
-						//sos.siodisk(jobOnDisk.jobNumber);//run the top of the diskQueue on the disk for I/O	
-						//?????
+			if(!ioRunningJob){
+				//This is the case when no more jobs were on io queue and we need to start the process
+				//ourselves. If there are other jobs on the queue, this job will be processed on first come, first serve.
+				Dskint(a, p);
+			}
 		}
 		else if(a[0]==7){
 			//Job requests to be blocked
@@ -106,8 +130,12 @@ public class os{
 	//Termination
 	//Remove job from queues, if exist
 	static void terminate(int jobID) {
-		Job job;
-		
+		Job job = jobsInMemory.get(jobID);
+		if(job !=  null){
+			freeSpaceTable.add(new FreeSpaceEntry(job.block, job.jobSize));
+			cpuQueue.remove(job);
+			diskQueue.remove(job);	
+		}
 	}
 
 
@@ -119,36 +147,17 @@ public class os{
 	//-if space is not found, the job is added to a vector of jobs that can't fit into memory called jobsNotFitting.
 	//           and try the next highest priority job in the drum.
 	static boolean tryMovingJobToMemory(){
-		Vector<Job> jobsNotFitting=new Vector<Job>();
-		while(jobsNotFitting.size()!=0 || jobsNotFitting.size()!=jobsInDrum.size()){
-			int count=0;
-			int highestPriority=5;
-			int jobLocationInDrum=0;
-			int base=-1; //will be -1 untill it is changed
-
-			//first look for job to move in with highest priorty
-			while(count<jobsInDrum.size()){
-				if(!jobsNotFitting.contains(jobsInDrum.get(count)) && jobsInDrum.get(count).priority<=highestPriority){
-					highestPriority=jobsInDrum.get(count).priority;
-					jobLocationInDrum=count;
-				}
-				count++;
-			}
-
-			//then we check if the highest priority job fits into memory
-			base=foundSpace(jobsInDrum.get(jobLocationInDrum));
-			if(base!=1000){
-                		swapToMemory(jobsInDrum.get(jobLocationInDrum),jobLocationInDrum, base);
+		Collections.sort(jobsInDrum);
+		int base = -1;
+		for(Job job : jobsInDrum){
+			base = foundSpace(job);
+			if(base >= 0){
+				jobsInDrum.remove(job);
+				swapToMemory(job, base);
 				return true;
-              		}
-			//if the highest priority job does not fit we add it to our list of jobs that don't fit
-			else{
-				jobsNotFitting.add(jobsInDrum.get(jobLocationInDrum));
-
 			}
 		}
 		return false;
-
 	}
 
 
@@ -158,18 +167,16 @@ public class os{
 	//and places the job passed into base location, by calling the SOS's siodrum() function
 	//it places the job in a queue container calle cpuQueue
 	//and since the job is no longer in the drum(backing store), it removes it from the drum
-	static void swapToMemory(Job jobInDrum, int locationInDrum, int block){
-		sos.siodrum(jobInDrum.jobNumber, jobInDrum.jobSize, block, 0);
-		jobInDrum.block=block;
-		cpuQueue.add(jobInDrum);
-		jobsInMemory.put(jobInDrum.jobNumber, jobInDrum);
-		jobsInDrum.remove(locationInDrum);
+	static void swapToMemory(Job jobInDrum, int block){
+		jobsBeingSwapped.add(jobInDrum);
+		jobInDrum.requestedBlock=block;
+		sos.siodrum(jobInDrum.jobNumber, jobInDrum.jobSize, block, 0);	
 	}
 
 
 	//checks the free space table if the job passed in the argument can fit a space in the free space table
 	//returns the block/base found for it, and updates the free space table to subtract the size of the job passed to it 
-	//if nothing found, returns a block/base value of 1000(this value can never be)
+	//if nothing found, returns a block/base value of -1(this value can never be)
 	static int foundSpace(Job jobInDrum){
 		int count=0;
 		while(freeSpaceTable.size()>=count){//check first fit
@@ -180,7 +187,7 @@ public class os{
 				return tempBlock;
 			}
 		}
-		return 1000;	
+		return -1;
 	}
 
 
@@ -195,8 +202,8 @@ public class os{
                                 p[2]=jobToRun.block;
                                 p[3]=jobToRun.jobSize;
                                 p[4]=jobToRun.maxCPUTime;
-				cpuRunningJob=true;
-				jobOnCPU=jobToRun;//now there is a variable to hold information about the current job running
+                                cpuRunningJob=true;
+                                jobOnCPU=jobToRun;//now there is a variable to hold information about the current job running
                         }
                 }
 	

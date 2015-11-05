@@ -1,5 +1,6 @@
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.LinkedList;
 import java.util.List;
 import java.util.ListIterator;
 
@@ -23,29 +24,28 @@ public class FreeSpaceEntry implements Comparable<FreeSpaceEntry>{
 	//Following variables/methods are used for Sorting The FreeSpace table
 	private static boolean sortBySize;
 	
-	public static void sortAndCompactBySize(List<FreeSpaceEntry> tableToSort){
+	public static void sortBySize(List<FreeSpaceEntry> tableToSort){
 		if(tableToSort.size()<2){
 			return;
 		}
-		//@Rev
-		sortAndCompactByBlock(tableToSort);	//We sort by Block to Merge and Then Sort by Size
-		
 		//Start of Sort by Size
 		FreeSpaceEntry.sortBySize = true;
 		Collections.sort(tableToSort);
 		//End of Sort by Size
 	}
 	
-	public static void sortAndCompactByBlock(List<FreeSpaceEntry> tableToSort){
+	public static void sortByBlock(List<FreeSpaceEntry> tableToSort){
 		if(tableToSort.size()<2){
 			return;
 		}
-		
 		//Start of Sort by Block
 		FreeSpaceEntry.sortBySize = false;
 		Collections.sort(tableToSort);  //Actual Sort
 		//End of Sort by Block
-		
+	}
+	
+	public static void compactBlocks(List<FreeSpaceEntry> tableToSort){
+		sortByBlock(tableToSort);
 		ListIterator<FreeSpaceEntry> tableIterator = tableToSort.listIterator();
 		while(tableIterator.hasNext()){
 			FreeSpaceEntry tempTableAtHand = tableIterator.next();
@@ -55,6 +55,7 @@ public class FreeSpaceEntry implements Comparable<FreeSpaceEntry>{
 				if(tempTableAtHandNext.block == currentEntryLastIndex){
 					tempTableAtHand.size += tempTableAtHandNext.size;
 					tableIterator.remove();
+					tableIterator.previous();
 				}else{
 					tableIterator.previous();
 				}		
@@ -87,16 +88,25 @@ public class FreeSpaceEntry implements Comparable<FreeSpaceEntry>{
 		test.add(new FreeSpaceEntry(7, 5));
 		test.add(new FreeSpaceEntry(79, 80));
 		test.add(new FreeSpaceEntry(24, 2));
-		
+		test.add(new FreeSpaceEntry(12, 1));
 		System.out.println("Pre Sort");
 		for(FreeSpaceEntry e : test){
 			System.out.println(e);
 		}
-		FreeSpaceEntry.sortAndCompactByBlock(test);
+		FreeSpaceEntry.compactBlocks(test);
 		System.out.println("\nAfter Compact");
 		for(FreeSpaceEntry e : test){
 			System.out.println(e);
 		}
+	}
+
+	static void deleteEntry(int block, int jobSize, LinkedList<FreeSpaceEntry> freeSpaceTable) {
+		for(FreeSpaceEntry e : freeSpaceTable){
+			if(e.block == block){
+				//Deleting the free space entry
+			}
+		}
+		
 	}
 	
 }
