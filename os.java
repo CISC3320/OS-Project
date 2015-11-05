@@ -3,11 +3,12 @@ import java.lang.System.*;
 
 public class os{
 	static LinkedList<Job> jobsInDrum;//is a list of jobs in the drum
+	static Map<Integer, Job> jobsInMemory; //is List of all the jobs in memory
 	static LinkedList<FreeSpaceEntry> freeSpaceTable;//is a list of free spaces entrees
 	static Queue<Job> cpuQueue;//a queue of jobs on the cpuQueue
 	static boolean cpuRunningJob;//true or false whether a job is using the cpu at the moment
 	static Job jobOnCPU;//contains the job that is currently using the cpu
-	static Job jobOnDisk;//contains the current job that is running on the disk
+	//static Job jobOnDisk;//contains the current job that is running I/O on the disk //Will be removed. Current job will always be top of queue
 	static Queue<Job> diskQueue;//contains jobs that are waiting to use the disk for I/O
 
 	//SOS's main calls the startup() function first
@@ -15,6 +16,7 @@ public class os{
 	static void startup(){
 		sos.ontrace();
 		jobsInDrum=new LinkedList<Job>();
+		jobsInMemory = new HashMap<Integer, Job>();
 		freeSpaceTable=new LinkedList<FreeSpaceEntry>();
 		freeSpaceTable.add(new FreeSpaceEntry(0,100));//start up free space table to contain one free space of 100k, at block 0 
 		cpuQueue=new LinkedList<Job>();
@@ -30,8 +32,6 @@ public class os{
 	static void Crint(int []a, int []p){
 		Job newJobInDrum=new Job(p[1],p[2],p[3],p[4]);
 		jobsInDrum.add(newJobInDrum);
-
-		
 		tryMovingJobToMemory();
 	}
 
@@ -41,6 +41,8 @@ public class os{
 	//also since Dskint was initiated, that means the program is not done with the CPU and has to be added back on the cpuQueue
 	//diskQueue works in FCFS
 	static void Dskint(int []a, int []p){
+		//@AR Job at tob of I/O (DISK Queue) finished I/O
+		
 		/*cpuQueue.add(jobOnDisk);
 		if(diskQueue.size()!=0){
 			jobOnDisk=diskQueue.peek();
@@ -55,6 +57,8 @@ public class os{
 	//and you can attempt to move something from the cpuQueue to using the cpu
 	//the scheduler() only attempts to make the move if nothing is running on the cpu at the moment by looking at the boolean jobOnCPU 
 	static void Drmint(int []a, int []p){
+		//@Ar successfuly brought job to Drum
+		//p[5] is the current time of the job
 		tryMovingJobToMemory();
 		scheduler(a,p);
 	}
@@ -64,7 +68,7 @@ public class os{
 	//will be later edited for dealing with time sliced
 	//for now will be called when a process finishes with the cpu and wants to terminate, since the scheduler is in FCFS
 	static void Tro(int []a, int []p){
-
+		System.out.println("Time Limit Reached");
 	}
 
 	//stands for supervisor call
@@ -75,18 +79,35 @@ public class os{
 	static void Svc(int []a, int []p){
 		cpuRunningJob=false;	
 		if(a[0]==5){
-					
+			//TerminationCode
+			terminate(p[1]);
 		}
 		else if(a[0]==6){
 			diskQueue.add(jobOnCPU);//add job on cpu to diskQueue
-                        jobOnDisk=diskQueue.poll();//save top of diskQeueu to jobOnDisk(the job that is going to run on the disk right now)
-			//?????
-			sos.siodisk(jobOnDisk.jobNumber);//run the top of the diskQueue on the disk for I/O	
-			//?????
+						//WILL BE REMOVED
+                        //jobOnDisk=diskQueue.poll();//save top of diskQeueu to jobOnDisk(the job that is going to run on the disk right now)
+						//?????
+			             //@AR: We will do this when diskIntOccurs          
+						//sos.siodisk(jobOnDisk.jobNumber);//run the top of the diskQueue on the disk for I/O	
+						//?????
 		}
 		else if(a[0]==7){
-		
+			//Job requests to be blocked
+			//First make sure that there is at least one IO request in queue fot this job
+			//If not, then ignore
+			for(Job j : diskQueue){
+				if(p[1] == j.jobNumber){
+					j.blocked = true;
+				}
+			}
 		}
+	}
+
+	//Termination
+	//Remove job from queues, if exist
+	static void terminate(int jobID) {
+		Job job;
+		
 	}
 
 
@@ -137,11 +158,11 @@ public class os{
 	//and places the job passed into base location, by calling the SOS's siodrum() function
 	//it places the job in a queue container calle cpuQueue
 	//and since the job is no longer in the drum(backing store), it removes it from the drum
-	static void swapToMemory(Job jobInDrum, int locationInDrum, int base){
-		sos.siodrum(jobInDrum.jobNumber, jobInDrum.jobSize, base, 0);
-		jobInDrum.base=base;
+	static void swapToMemory(Job jobInDrum, int locationInDrum, int block){
+		sos.siodrum(jobInDrum.jobNumber, jobInDrum.jobSize, block, 0);
+		jobInDrum.block=block;
 		cpuQueue.add(jobInDrum);
-
+		jobsInMemory.put(jobInDrum.jobNumber, jobInDrum);
 		jobsInDrum.remove(locationInDrum);
 	}
 
@@ -171,7 +192,7 @@ public class os{
                         Job jobToRun=cpuQueue.poll();//poll() if java equivelent of pop()
                         if(jobToRun!=null){
                                 a[0]=2;
-                                p[2]=jobToRun.base;
+                                p[2]=jobToRun.block;
                                 p[3]=jobToRun.jobSize;
                                 p[4]=jobToRun.maxCPUTime;
 				cpuRunningJob=true;
