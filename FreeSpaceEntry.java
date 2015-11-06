@@ -103,10 +103,14 @@ public class FreeSpaceEntry implements Comparable<FreeSpaceEntry>{
 	static void deleteEntry(int block, int jobSize, LinkedList<FreeSpaceEntry> freeSpaceTable) {
 		for(FreeSpaceEntry e : freeSpaceTable){
 			if(e.block == block){
-				//Deleting the free space entry
+				freeSpaceTable.remove(e);
+				if(e.size > jobSize){
+					freeSpaceTable.add(new FreeSpaceEntry(block+jobSize, e.size-jobSize));
+				}
+				break;
 			}
 		}
-		
+		compactBlocks(freeSpaceTable);
 	}
 	
 }

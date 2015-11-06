@@ -7,6 +7,7 @@ class Job implements Comparable<Job>{
 	public int jobNumber, priority, jobSize, maxCPUTime, block, usedTime, requestedBlock;
 	public boolean blocked;//true of job requests to be blocked
 	public final long jobEntredTime;
+	public boolean killThisJob;
 	Job(int jobNumber, int priority, int jobSize, int maxCPUTime){
 		this.jobNumber=jobNumber;
 		this.priority=priority;
