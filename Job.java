@@ -1,4 +1,3 @@
-import java.lang.System.*;
 import java.util.Collections;
 import java.util.LinkedList;
 
@@ -7,12 +6,14 @@ class Job implements Comparable<Job>{
 	public int jobNumber, priority, jobSize, maxCPUTime, block, usedTime, requestedBlock;
 	public boolean blocked;//true of job requests to be blocked
 	public final long jobEntredTime;
+	public int lastSceduledTime;
 	public boolean killThisJob;
 	Job(int jobNumber, int priority, int jobSize, int maxCPUTime){
 		this.jobNumber=jobNumber;
 		this.priority=priority;
 		this.jobSize=jobSize;
 		this.maxCPUTime=maxCPUTime;
+		this.usedTime = 0;
 		blocked=false;
 		block=-1;//when a new job is created it isnt assigned a block yet
 		jobEntredTime = System.currentTimeMillis();
@@ -24,7 +25,7 @@ class Job implements Comparable<Job>{
 		System.out.println("jobSize: "+jobSize);
 		System.out.println("maxCPUTime: "+maxCPUTime);
 		System.out.println("timeUsed: "+maxCPUTime);
-		System.out.println("timeEntered: "+jobEntredTime+"\n");
+		System.out.println("timeEntered: "+jobEntredTime);
 	}
 
 	@Override

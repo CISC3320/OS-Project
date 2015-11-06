@@ -39,6 +39,7 @@ public class os{
 		Job newJobInDrum = new Job(p[1], p[2], p[3], p[4]); //Initialize the new job
 		jobsInDrum.add(newJobInDrum);	//Add job to list indicating jobs in the Drum
 		tryMovingJobToMemory();			//Try Moving the job into memory
+		scheduler(a,p);					//We will try to schedule the next Job
 	}
 
 
@@ -57,7 +58,6 @@ public class os{
 			}else if (!diskQueue.contains(job) && job.killThisJob){
 				//Indicated if the job is ready to be killed pending all IO operations
 				terminate(job.jobNumber);
-				scheduler(a, p);
 			}
 		}
 		if(diskQueue.size() > 0){
@@ -76,11 +76,9 @@ public class os{
 	//and you can attempt to move something from the cpuQueue to using the cpu
 	//the scheduler() only attempts to make the move if nothing is running on the cpu at the moment by looking at the boolean jobOnCPU 
 	static void Drmint(int []a, int []p){
-		//@AR:Completed
-		Job job = jobsBeingSwapped.remove();
+  		Job job = jobsBeingSwapped.remove();
 		FreeSpaceEntry.deleteEntry(job.block, job.jobSize, freeSpaceTable);
 		job.block = job.requestedBlock;
-		job.usedTime = p[5];
 		cpuQueue.add(job);
 		jobsInMemory.put(job.jobNumber, job);
 		tryMovingJobToMemory();	// Try Moving the next job
@@ -93,16 +91,18 @@ public class os{
 	static void Tro(int []a, int []p){
 		Job job = cpuQueue.peek();
 		if(job != null){
-			if(p[5] >= job.maxCPUTime){
+			if(job.usedTime > job.maxCPUTime){
 				//Job has used the maximum CPU TIME
+				//@TODO: This is a valid statement, but we don't have a valid
+				//way to know how much time the job has used.
 				terminate (job.jobNumber);
 			}else{
 				//Job has used its current timeslice
 				cpuQueue.poll();	//remove from top of the queue
 				cpuQueue.add(job);	//add at tail of the queue
 			}
-			scheduler(a, p); //Try to schedule the next Job
 		}
+		scheduler(a, p); //Try to schedule the next Job
 	}
 	
 	//stands for supervisor call
@@ -113,9 +113,7 @@ public class os{
 	static void Svc(int[] a, int[] p){
 		if(a[0]==5){
 			terminate(cpuQueue.peek().jobNumber);
-			scheduler(a, p);
-		}
-		else if(a[0]==6){
+		}else if(a[0]==6){
 			Job job = cpuQueue.poll();
 			cpuQueue.add(job);
 			diskQueue.add(job);//add job on cpu to diskQueue
@@ -124,8 +122,7 @@ public class os{
 				//ourselves. If there are other jobs on the queue, this job will be processed on first come, first serve.
 				Dskint(a, p);
 			}
-		}
-		else if(a[0]==7){
+		}else if(a[0]==7){
 			//Job requests to be blocked
 			//First make sure that there is at least one IO request in queue fot this job
 			//If not, then ignore
@@ -135,6 +132,7 @@ public class os{
 				}
 			}
 		}
+		scheduler(a, p);
 	}
 
 	//Termination
@@ -146,7 +144,6 @@ public class os{
 		}else if(job !=  null){
 			freeSpaceTable.add(new FreeSpaceEntry(job.block, job.jobSize));
 			cpuQueue.remove(job);
-			diskQueue.remove(job);	
 		}
 	}
 
@@ -215,12 +212,12 @@ public class os{
                                 a[0]=2;
                                 p[2]=jobToRun.block;
                                 p[3]=jobToRun.jobSize;
-                                p[4]=jobToRun.maxCPUTime;
+                                p[4]=2;//jobToRun.maxCPUTime;
                                 cpuRunningJob=true;
+                                jobToRun.lastSceduledTime = p[5];
                         }else{
                         	a[0]=1;
                         }
-                
 	}
 	
 }
