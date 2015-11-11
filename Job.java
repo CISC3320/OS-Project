@@ -13,21 +13,23 @@ class Job implements Comparable<Job>{
 		this.priority=priority;
 		this.jobSize=jobSize;
 		this.maxCPUTime=maxCPUTime;
-		this.usedTime = 0;
+		usedTime = 0;
 		blocked=false;
 		block=-1;//when a new job is created it isnt assigned a block yet
+        lastSceduledTime=-1;
 		jobEntredTime = System.currentTimeMillis();
 	}
-
+    
 	void printJob(){//just for testing
 		System.out.println("jobNumber: "+jobNumber);
 		System.out.println("priority: "+priority);
 		System.out.println("jobSize: "+jobSize);
 		System.out.println("maxCPUTime: "+maxCPUTime);
-		System.out.println("timeUsed: "+maxCPUTime);
+		System.out.println("timeUsed: "+usedTime);
+        System.out.println("lastScheduledTime: "+lastSceduledTime);
 		System.out.println("timeEntered: "+jobEntredTime);
 	}
-
+    
 	@Override
 	public int compareTo(Job o) {
 		//This will result list from Collections.sort(List) sorted by Priority First and then time they entered
