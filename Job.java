@@ -27,9 +27,14 @@ class Job implements Comparable<Job>{
 		System.out.println("maxCPUTime: "+maxCPUTime);
 		System.out.println("timeUsed: "+usedTime);
         System.out.println("lastScheduledTime: "+lastSceduledTime);
-		System.out.println("timeEntered: "+jobEntredTime);
 	}
     
+	String jobInfo(){
+		return jobNumber+"\t"+priority+"\t"+jobSize+"\t"
+				+maxCPUTime+"\t"+usedTime+"\t"+lastSceduledTime
+				+"\t"+blocked+"\t"+killThisJob;
+	}
+	
 	@Override
 	public int compareTo(Job o) {
 		//This will result list from Collections.sort(List) sorted by Priority First and then time they entered

@@ -3,7 +3,7 @@ import java.util.*;
 public class os{
 	static LinkedList<Job> jobsInDrum;//is a list of jobs in the drum
 	static LinkedList<FreeSpaceEntry> freeSpaceTable;//is a list of free spaces entrees
-	static LinkedList<Job> jobsBeingSwapped;
+	static Job jobBeingSwapped;
     
 	static Queue<Job> cpuQueue;//a queue of jobs on the cpuQueue
 	static Queue<Job> diskQueue;//contains jobs that are waiting to use the disk for I/O
@@ -24,7 +24,7 @@ public class os{
 		sos.ontrace();
 		jobsInDrum=new LinkedList<Job>();
 		jobsInMemory = new HashMap<Integer, Job>();
-		jobsBeingSwapped = new LinkedList<Job>();
+		//jobsBeingSwapped = new LinkedList<Job>();
 		freeSpaceTable=new LinkedList<FreeSpaceEntry>();
 		freeSpaceTable.add(new FreeSpaceEntry(0,100));//start up free space table to contain one free space of 100k, at block 0 
 		cpuQueue=new LinkedList<Job>();
@@ -80,7 +80,7 @@ public class os{
 	//the scheduler() only attempts to make the move if nothing is running on the cpu at the moment by looking at the boolean jobOnCPU 
 	static void Drmint(int []a, int []p){
         jobMovingToMemory=false;//because a job was just finished with laoding into memory*******************newly added
-  		Job job = jobsBeingSwapped.remove();
+  		Job job = jobBeingSwapped;
 		job.block = job.requestedBlock;
         FreeSpaceEntry.deleteEntry(job.block, job.jobSize, freeSpaceTable);
 		cpuQueue.add(job);
@@ -95,7 +95,7 @@ public class os{
 	//for now will be called when a process finishes with the cpu and wants to terminate, since the scheduler is in FCFS
 	static void Tro(int []a, int []p){
 		Job job = cpuQueue.peek();
-        job.usedTime+=timeslice;//*****************newly added 
+        job.usedTime += timeslice;//*****************newly added 
 		if(job != null){
 			if(job.usedTime >= job.maxCPUTime){
 				//Job has used the maximum CPU TIME
@@ -116,7 +116,7 @@ public class os{
 	//when a=7 then job wants to be blocked (change boolean blocked, of current job, to true
 	//or else it is called when an I/O request is done
 	static void Svc(int[] a, int[] p){
-        cpuQueue.peek().usedTime+=p[5]-cpuQueue.peek().lastSceduledTime;//*****************newly added 
+        cpuQueue.peek().usedTime += p[5]-cpuQueue.peek().lastSceduledTime;//*****************newly added 
 		if(a[0]==5){
 			terminate(cpuQueue.peek().jobNumber);
 		}else if(a[0]==6){
@@ -132,12 +132,9 @@ public class os{
 			//Job requests to be blocked
 			//First make sure that there is at least one IO request in queue fot this job
 			//If not, then ignore
-			for(Job j : diskQueue){
-				if(cpuQueue.peek().jobNumber == j.jobNumber){//************************changed
-					j.blocked = true;
-            }
-            cpuQueue.peek().blocked=true;//*******************newly added     not sure if even needed
-            cpuQueue.add(cpuQueue.poll());//*******************newly added     not sure if even needed
+			Job j = cpuQueue.peek();
+			if(diskQueue.contains(j)){
+				j.blocked = true;
 			}
 		}
 		scheduler(a, p);
@@ -189,7 +186,7 @@ public class os{
 	//it places the job in a queue container calle cpuQueue
 	//and since the job is no longer in the drum(backing store), it removes it from the drum
 	static void swapToMemory(Job jobInDrum, int block){
-		jobsBeingSwapped.add(jobInDrum);
+		jobBeingSwapped = jobInDrum;
 		jobInDrum.requestedBlock=block;
         jobMovingToMemory=true;//**************************newly added
 		sos.siodrum(jobInDrum.jobNumber, jobInDrum.jobSize, block, 0);
@@ -212,9 +209,10 @@ public class os{
 	//check if there is no job running on the cpu
 	//if there isn't, pop a job of the cpu queue, and run it on the cpu by changing a[0] to 2 	
 	static void scheduler(int []a, int []p){
+		printAll();
         Job firstJob = cpuQueue.peek();
         Job jobToRun=firstJob;
-        while(jobToRun !=null && jobToRun.blocked){
+        while(jobToRun !=null && (jobToRun.blocked || jobToRun.killThisJob)){
             cpuQueue.add(cpuQueue.poll());
             jobToRun = cpuQueue.peek();
             if(jobToRun == firstJob){
@@ -230,6 +228,8 @@ public class os{
             else
                 p[4]=timeslice;
             cpuRunningJob=true;
+            System.out.println("AR-Slice Job time used by job "+jobToRun.jobNumber+":"+jobToRun.usedTime+"\nScheduled timeslice:"+p[4]);
+            
             jobToRun.lastSceduledTime = p[5];
             
         }else{
@@ -237,5 +237,20 @@ public class os{
         }
 	}
     
-	
+	static void printAll(){
+		System.out.println("OS Statistics");
+		System.out.print("\n\nJobs in Cpu queue\njobNumber\tpriority\tjobSize\t"
+				+ "maxCPUTime\tusedTime\tlastSceduledTime"+
+				"\tblocked\tkillThisJob\n");
+		for(Job job : cpuQueue){
+			System.out.print(job.jobInfo()+"\n");
+		}
+		System.out.print("\n\nJobs in IO queue\njobNumber\tpriority\tjobSize\t"
+				+ "maxCPUTime\tusedTime\tlastSceduledTime"+
+				"\tblocked\tkillThisJob\n");
+		for(Job job : diskQueue){
+			System.out.print(job.jobInfo()+"\n");
+		}
+		System.out.print("\n\n");
+	}
 }
