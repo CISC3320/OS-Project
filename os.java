@@ -44,7 +44,7 @@ public class os{
 		jobsInDrum.add(newJobInDrum);	//Add job to list indicating jobs in the Drum
 		tryMovingJobToMemory();			//Try Moving the job into memory
         
-        if(cpuQueue.size()>0){
+        if(cpuQueue.size()>0 && cpuQueue.peek().lastSceduledTime!=-1){
             cpuQueue.peek().usedTime+=p[5]-cpuQueue.peek().lastSceduledTime;
             System.out.println("CPU TIME Used by job "+cpuQueue.peek().jobNumber+": "+cpuQueue.peek().usedTime);
         }
