@@ -39,15 +39,12 @@ public class os{
      */
 	static void Crint(int[] a, int[] p){
         System.out.println("INSIDE CRINT");
+        updateCPUused(p[5]);
+        
 		//@AR: Completed
 		Job newJobInDrum = new Job(p[1], p[2], p[3], p[4]); //Initialize the new job
 		jobsInDrum.add(newJobInDrum);	//Add job to list indicating jobs in the Drum
 		tryMovingJobToMemory();			//Try Moving the job into memory
-        
-        if(cpuQueue.size()>0 && cpuQueue.peek().lastSceduledTime!=-1){
-            cpuQueue.peek().usedTime+=p[5]-cpuQueue.peek().lastSceduledTime;
-            System.out.println("CPU TIME Used by job "+cpuQueue.peek().jobNumber+": "+cpuQueue.peek().usedTime);
-        }
         scheduler(a,p);				//We will try to schedule the next Job
 	}
     
@@ -60,6 +57,8 @@ public class os{
 	static void Dskint(int[] a, int[] p){
 		//@AR: Completed
         System.out.println("INSIDE DISKINT");
+        updateCPUused(p[5]);
+
 		if(ioRunningJob){
 			Job job = diskQueue.poll();	//Remove the last executed I/O job
 			if(job.blocked && !diskQueue.contains(job)){
@@ -69,14 +68,6 @@ public class os{
 				//Indicated if the job is ready to be killed pending all IO operations
 				terminate(job.jobNumber);
 			}
-            else{
-
-                job.usedTime+=p[5]-job.lastSceduledTime;
-                /*
-                 print cpu time for testing, delete later
-                 */
-                System.out.println("CPU TIME Used by job "+cpuQueue.peek().jobNumber+": "+cpuQueue.peek().usedTime);
-            }
 		}
 		if(diskQueue.size() > 0){
 			Job nextJob = diskQueue.peek();
@@ -94,6 +85,9 @@ public class os{
 	//and you can attempt to move something from the cpuQueue to using the cpu
 	//the scheduler() only attempts to make the move if nothing is running on the cpu at the moment by looking at the boolean jobOnCPU 
 	static void Drmint(int []a, int []p){
+        System.out.println("INSIDE DMRINT");
+        updateCPUused(p[5]);
+        
         jobMovingToMemory=false;//because a job was just finished with laoding into memory*******************newly added
   		Job job = jobBeingSwapped;
 		job.block = job.requestedBlock;
@@ -103,11 +97,7 @@ public class os{
         if(jobsInDrum.size()>0)
             tryMovingJobToMemory();	// Try Moving the next job
         
-        System.out.println("INSIDE DMRINT");
-        if(cpuQueue!=null && cpuQueue.peek().lastSceduledTime!=-1/*cpuQueue.size()>0*/){
-            cpuQueue.peek().usedTime+=p[5]-cpuQueue.peek().lastSceduledTime;
-            System.out.println("CPU TIME Used by job "+cpuQueue.peek().jobNumber+": "+cpuQueue.peek().usedTime);
-        }
+
 
 		scheduler(a,p);			// try scheduling the job
 	}
@@ -116,10 +106,11 @@ public class os{
 	//will be later edited for dealing with time sliced
 	//for now will be called when a process finishes with the cpu and wants to terminate, since the scheduler is in FCFS
 	static void Tro(int []a, int []p){
+        Job job = cpuQueue.peek();
+        
         System.out.println("INSIDE TRO");
-		Job job = cpuQueue.peek();
-        job.usedTime += p[5]-job.lastSceduledTime;
-        System.out.println("CPU TIME Used by job "+cpuQueue.peek().jobNumber+": "+cpuQueue.peek().usedTime);
+        updateCPUused(p[5]);
+        
 		if(job != null){
 			if(job.usedTime >= job.maxCPUTime){
 				//Job has used the maximum CPU TIME
@@ -131,9 +122,6 @@ public class os{
 				cpuQueue.add(job);	//add at tail of the queue
             }
 		}
-        /*
-         print cpu time for testing, delete later
-         */
 
 		scheduler(a, p); //Try to schedule the next Job
 	}
@@ -144,13 +132,8 @@ public class os{
 	//when a=7 then job wants to be blocked (change boolean blocked, of current job, to true
 	//or else it is called when an I/O request is done
 	static void Svc(int[] a, int[] p){
-        cpuQueue.peek().usedTime += p[5]-cpuQueue.peek().lastSceduledTime;
-        
-        /*
-         print cpu time for testing, delete later
-         */
         System.out.println("INSIDE SVC");
-        System.out.println("CPU TIME Used by job "+cpuQueue.peek().jobNumber+": "+cpuQueue.peek().usedTime);
+        updateCPUused(p[5]);
         
 		if(a[0]==5){
 			terminate(cpuQueue.peek().jobNumber);
@@ -271,6 +254,13 @@ public class os{
             a[0]=1;
         }
 	}
+    
+    static void updateCPUused(int time){
+        if(cpuQueue.size()>0 && cpuQueue.peek().lastSceduledTime!=-1 && !cpuQueue.peek().blocked){
+            cpuQueue.peek().usedTime+=time-cpuQueue.peek().lastSceduledTime;
+            System.out.println("CPU TIME Used by job "+cpuQueue.peek().jobNumber+": "+cpuQueue.peek().usedTime);
+        }
+    }
     
 	static void printAll(){
 		System.out.println("OS Statistics");
