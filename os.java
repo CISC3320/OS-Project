@@ -248,7 +248,8 @@ public class os{
             cpuRunningJob=true;
             //System.out.println("AR-Slice Job time used by job "+jobToRun.jobNumber+":"+jobToRun.usedTime+"\nScheduled timeslice:"+p[4]);
             
-            jobToRun.lastSceduledTime = p[5];
+            jobToRun.lastScheduledTime = p[5];
+            jobToRun.cpuTimeAdded=false;
             
         }else{
             a[0]=1;
@@ -256,22 +257,25 @@ public class os{
 	}
     
     static void updateCPUused(int time){
-        if(cpuQueue.size()>0 && cpuQueue.peek().lastSceduledTime!=-1 && !cpuQueue.peek().blocked){
-            cpuQueue.peek().usedTime+=time-cpuQueue.peek().lastSceduledTime;
-            System.out.println("CPU TIME Used by job "+cpuQueue.peek().jobNumber+": "+cpuQueue.peek().usedTime);
+        if(cpuQueue.size()>0 && cpuQueue.peek().lastScheduledTime!=-1 && !cpuQueue.peek().blocked){
+            if(!cpuQueue.peek().cpuTimeAdded){
+                cpuQueue.peek().usedTime+=time-cpuQueue.peek().lastScheduledTime;
+                cpuQueue.peek().cpuTimeAdded=true;
+                System.out.println("CPU TIME Used by job "+cpuQueue.peek().jobNumber+": "+cpuQueue.peek().usedTime);
+            }
         }
     }
     
 	static void printAll(){
 		System.out.println("OS Statistics");
 		System.out.print("\n\nJobs in Cpu queue\njobNumber\tpriority\tjobSize\t"
-                         + "maxCPUTime\tusedTime\tlastSceduledTime"+
+                         + "maxCPUTime\tusedTime\tlastScheduledTime"+
                          "\tblocked\tkillThisJob\n");
 		for(Job job : cpuQueue){
 			System.out.print(job.jobInfo()+"\n");
 		}
 		System.out.print("\n\nJobs in IO queue\njobNumber\tpriority\tjobSize\t"
-                         + "maxCPUTime\tusedTime\tlastSceduledTime"+
+                         + "maxCPUTime\tusedTime\tlastScheduledTime"+
                          "\tblocked\tkillThisJob\n");
 		for(Job job : diskQueue){
 			System.out.print(job.jobInfo()+"\n");
