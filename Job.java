@@ -6,8 +6,9 @@ class Job implements Comparable<Job>{
 	public int jobNumber, priority, jobSize, maxCPUTime, block, usedTime, requestedBlock;
 	public boolean blocked;//true of job requests to be blocked
 	public final long jobEntredTime;
-	public int lastSceduledTime;
+	public int lastScheduledTime;
 	public boolean killThisJob;
+    public boolean cpuTimeAdded;//makes sure cpuTime is added only once per call of scheduler
 	Job(int jobNumber, int priority, int jobSize, int maxCPUTime){
 		this.jobNumber=jobNumber;
 		this.priority=priority;
@@ -15,8 +16,9 @@ class Job implements Comparable<Job>{
 		this.maxCPUTime=maxCPUTime;
 		usedTime = 0;
 		blocked=false;
+        cpuTimeAdded=false;
 		block=-1;//when a new job is created it isnt assigned a block yet
-        lastSceduledTime=-1;
+        lastScheduledTime=-1;
 		jobEntredTime = System.currentTimeMillis();
 	}
     
@@ -26,13 +28,13 @@ class Job implements Comparable<Job>{
 		System.out.println("jobSize: "+jobSize);
 		System.out.println("maxCPUTime: "+maxCPUTime);
 		System.out.println("timeUsed: "+usedTime);
-        System.out.println("lastScheduledTime: "+lastSceduledTime);
+        System.out.println("lastScheduledTime: "+lastScheduledTime);
 	}
     
 	String jobInfo(){
 		return jobNumber+"\t"+priority+"\t"+jobSize+"\t"
-				+maxCPUTime+"\t"+usedTime+"\t"+lastSceduledTime
-				+"\t"+blocked+"\t"+killThisJob;
+        +maxCPUTime+"\t"+usedTime+"\t"+lastScheduledTime
+        +"\t"+blocked+"\t"+killThisJob;
 	}
 	
 	@Override
