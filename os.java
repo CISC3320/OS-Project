@@ -16,7 +16,8 @@ public class os{
     static boolean jobMovingToMemory=false;//true or false if a job is being moved into memory
     
     static final int timeslice=3;
-    
+    static final int maxWithSamePriority=2;
+    static final int[] priorityInQueue = new int[5];
 	/*
 	 * Initialize the Variables. Think of it as power on for OS
 	 */
@@ -134,7 +135,6 @@ public class os{
 	static void Svc(int[] a, int[] p){
         System.out.println("INSIDE SVC");
         updateCPUused(p[5]);
-        
 		if(a[0]==5){
 			terminate(cpuQueue.peek().jobNumber);
 		}else if(a[0]==6){
@@ -168,6 +168,7 @@ public class os{
 			freeSpaceTable.add(new FreeSpaceEntry(job.block, job.jobSize));
             FreeSpaceEntry.compactBlocks(freeSpaceTable);
 			cpuQueue.remove(job);
+			priorityInQueue[job.priority-1]--;
 		}
         tryMovingJobToMemory();
 	}
@@ -184,18 +185,24 @@ public class os{
         if(!jobMovingToMemory){
             Collections.sort(jobsInDrum);
             int block = -1;
-            for(Job job : jobsInDrum){
-                block = findSpace(job);
-                if(block >= 0){
-                    jobsInDrum.remove(job);
-                    swapToMemory(job, block);
-                    return true;
-                }
+            boolean passedOnce = false;
+            for(int i=0; i<2; i++){
+	            for(Job job : jobsInDrum){
+	            	if(priorityInQueue[job.priority-1] < maxWithSamePriority || passedOnce){
+		                block = findSpace(job);
+		                if(block >= 0){
+		                    jobsInDrum.remove(job);
+		                    swapToMemory(job, block);
+		                    priorityInQueue[job.priority-1]++;
+		                    return true;
+		                }
+	            	}
+	            }
+	            passedOnce = true;
             }
         }
         return false;
 	}
-    
     
 	//function takes a job passed to it(the job should be in the drum)
 	//takes the location of the job in the linkedList(jobsInDrum)
@@ -279,6 +286,13 @@ public class os{
 		for(Job job : diskQueue){
 			System.out.print(job.jobInfo()+"\n");
 		}
+		System.out.print("\n\nJobs in Drum\njobNumber\tpriority\tjobSize\t"
+                + "maxCPUTime\tusedTime\tlastScheduledTime"+
+                "\tblocked\tkillThisJob\n");
+		for(Job job : jobsInDrum){
+			System.out.print(job.jobInfo()+"\n");
+		}
+		
 		System.out.print("\n\n");
 	}
 }
