@@ -246,7 +246,6 @@ public class os{
             else
                 p[4]=timeslice;
             cpuRunningJob=true;
-            //System.out.println("AR-Slice Job time used by job "+jobToRun.jobNumber+":"+jobToRun.usedTime+"\nScheduled timeslice:"+p[4]);
             
             jobToRun.lastScheduledTime = p[5];
             jobToRun.cpuTimeAdded=false;

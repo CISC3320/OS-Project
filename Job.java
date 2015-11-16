@@ -42,7 +42,10 @@ class Job implements Comparable<Job>{
 		//This will result list from Collections.sort(List) sorted by Priority First and then time they entered
 		int toReturn = this.priority > o.priority ? -1 : this.priority < o.priority ? 1 : 0;
 		if(toReturn == 0){
-			toReturn = this.jobEntredTime > o.jobEntredTime ? -1 : this.jobEntredTime < o.jobEntredTime ? 1 : 0;
+			//toReturn = this.jobEntredTime > o.jobEntredTime ? -1 : this.jobEntredTime < o.jobEntredTime ? 1 : 0;
+			//maybeProcessSmallerJobsFirst?
+			toReturn = this.jobSize > o.jobSize ? -1 : this.jobSize < o.jobSize ? 1 : 0;
+
 		}
 		return toReturn;
 	}
