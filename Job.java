@@ -1,14 +1,20 @@
+import java.util.ArrayList;
 import java.util.Collections;
+import java.util.Comparator;
 import java.util.LinkedList;
+import java.util.List;
+
 
 class Job implements Comparable<Job>{
 	
 	public int jobNumber, priority, jobSize, maxCPUTime, block, usedTime, requestedBlock;
 	public boolean blocked;//true of job requests to be blocked
-	public final long jobEntredTime;
+	public long jobEntredTime;
 	public int lastScheduledTime;
 	public boolean killThisJob;
     public boolean cpuTimeAdded;//makes sure cpuTime is added only once per call of scheduler
+    public boolean superPriority = false;
+    
 	Job(int jobNumber, int priority, int jobSize, int maxCPUTime){
 		this.jobNumber=jobNumber;
 		this.priority=priority;
@@ -23,12 +29,10 @@ class Job implements Comparable<Job>{
 	}
     
 	void printJob(){//just for testing
-		System.out.println("jobNumber: "+jobNumber);
-		System.out.println("priority: "+priority);
-		System.out.println("jobSize: "+jobSize);
-		System.out.println("maxCPUTime: "+maxCPUTime);
-		System.out.println("timeUsed: "+usedTime);
-        System.out.println("lastScheduledTime: "+lastScheduledTime);
+		System.out.println("jobNumber: "+jobNumber +"\tpriority: "+priority +"\tBlock: "+block
+				+"\tjobSize: "+jobSize+"\tmaxCPUTime: "+maxCPUTime
+				+"\ttimeUsed: "+usedTime +"\tRequestedBlock: "+requestedBlock);
+
 	}
     
 	String jobInfo(){
@@ -42,7 +46,8 @@ class Job implements Comparable<Job>{
 		//This will result list from Collections.sort(List) sorted by Priority First and then time they entered
 		int toReturn = this.priority > o.priority ? -1 : this.priority < o.priority ? 1 : 0;
 		if(toReturn == 0){
-			toReturn = this.jobEntredTime > o.jobEntredTime ? -1 : this.jobEntredTime < o.jobEntredTime ? 1 : 0;
+			//toReturn = this.jobEntredTime > o.jobEntredTime ? -1 : this.jobEntredTime < o.jobEntredTime ? 1 : 0;
+			toReturn = this.jobSize < o.jobSize ? -1 : this.jobSize > o.jobSize ? 1 : 0;
 		}
 		return toReturn;
 	}
@@ -63,5 +68,19 @@ class Job implements Comparable<Job>{
 		System.out.println(jobsInDrum.remove().jobNumber);
 	}
 	
-	
+	public static void sortListBySizeAndBlocked(List<Job> uList){
+		Collections.sort(uList, new SizeBlockComparator());
+	}
+}
+
+class SizeBlockComparator implements Comparator<Job>{
+	@Override
+	public int compare(Job a, Job o) {
+		//Will result in largest jobs Blocked First, then Size
+		int toReturn  = a.blocked == o.blocked ? 0 : a.blocked ? -1 : 1;
+		if(toReturn == 0){
+			toReturn = a.jobSize > o.jobSize ? 1 : a.jobSize < o.jobSize ? -1 : 0;
+		}
+		return toReturn;
+	}
 }

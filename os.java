@@ -1,12 +1,13 @@
 import java.util.*;
 
 public class os{
-	static LinkedList<Job> jobsInDrum;//is a list of jobs in the drum
 	static LinkedList<FreeSpaceEntry> freeSpaceTable;//is a list of free spaces entrees
-	static Job jobBeingSwapped;
-    
-	static Queue<Job> cpuQueue;//a queue of jobs on the cpuQueue
-	static Queue<Job> diskQueue;//contains jobs that are waiting to use the disk for I/O
+	
+	static LinkedList<Job> drumQueue;//is a list of jobs in the drum
+	static LinkedList<Job> diskQueue;//contains jobs that are waiting to use the disk for I/O
+	static LinkedList<Job> cpuQueue;//a queue of jobs on the cpuQueue
+
+	static Job jobBeingSwapped = null;	//job that is either being swapped in or out of memory
     
 	static Map<Integer, Job> jobsInMemory; //is List of all the jobs in memory
     
@@ -14,22 +15,25 @@ public class os{
 	static boolean cpuRunningJob=false;//true or false whether a job is using the cpu at the moment
 	static boolean ioRunningJob=false; //true or false to indicate whether a job is using IO
     static boolean jobMovingToMemory=false;//true or false if a job is being moved into memory
+    static boolean jobMovingOutOfMemory=false;//true or false if a job is being moved into memory
     
     static final int timeslice=3;
     static final int maxWithSamePriority=2;
     static final int[] priorityInQueue = new int[5];
+    
+    static int lastJobKicked = 0;
+    
 	/*
 	 * Initialize the Variables. Think of it as power on for OS
 	 */
 	static void startup(){
-		sos.ontrace();
-		jobsInDrum=new LinkedList<Job>();
+		sos.offtrace();
+		drumQueue=new LinkedList<Job>();
 		jobsInMemory = new HashMap<Integer, Job>();
-		//jobsBeingSwapped = new LinkedList<Job>();
-		freeSpaceTable=new LinkedList<FreeSpaceEntry>();
-		freeSpaceTable.add(new FreeSpaceEntry(0,100));//start up free space table to contain one free space of 100k, at block 0 
 		cpuQueue=new LinkedList<Job>();
 		diskQueue=new LinkedList<Job>();
+		freeSpaceTable=new LinkedList<FreeSpaceEntry>();
+		freeSpaceTable.add(new FreeSpaceEntry(0,100));//start up free space table to contain one free space of 100k, at block 0 
 	}
     
 	/*
@@ -39,26 +43,33 @@ public class os{
      if this is the first job to enter the system, you can attempt to move job into memoery using tryMovingJobToMemory()
      */
 	static void Crint(int[] a, int[] p){
-        System.out.println("INSIDE CRINT");
-        updateCPUused(p[5]);
-        
-		//@AR: Completed
+        updateCPUused(p[5]);	//update cpu time
 		Job newJobInDrum = new Job(p[1], p[2], p[3], p[4]); //Initialize the new job
-		jobsInDrum.add(newJobInDrum);	//Add job to list indicating jobs in the Drum
-		tryMovingJobToMemory();			//Try Moving the job into memory
+		drumQueue.add(newJobInDrum);	//Add job to list indicating jobs in the Drum
+		jobMigration();			//Try Moving the job into memory
         scheduler(a,p);				//We will try to schedule the next Job
 	}
     
-    
+    static void jobMigration(){
+        if(drumQueue.size()>0){
+        	if(jobBeingSwapped == null){
+        		if(!tryMovingJobToMemory()){
+        			if(lastJobKicked > 100){
+        				lastJobKicked = 0;
+        				tryMovingJobOutOfMemory();
+        			}
+        		}
+        	}
+        }
+    }
+	
 	//SOS calls this interrupt when a job was successfully moved from memory to disk(for I/O)
 	//this means you can try to put the next job on the diskQueue to use the disk
 	//also since Dskint was initiated, that means the program is not done with the CPU and has to be added back on the cpuQueue
 	//diskQueue works in FCFS
 	//@AR Job at tob of I/O (DISK Queue) finished I/O
 	static void Dskint(int[] a, int[] p){
-		//@AR: Completed
-        System.out.println("INSIDE DISKINT");
-        updateCPUused(p[5]);
+        updateCPUused(p[5]);	//Update cpu time
 
 		if(ioRunningJob){
 			Job job = diskQueue.poll();	//Remove the last executed I/O job
@@ -72,11 +83,14 @@ public class os{
 		}
 		if(diskQueue.size() > 0){
 			Job nextJob = diskQueue.peek();
-			ioRunningJob = true;
-			sos.siodisk(nextJob.jobNumber);
+			if(jobsInMemory.containsKey(nextJob.jobNumber) && (jobBeingSwapped == null || jobBeingSwapped != nextJob)){
+				ioRunningJob = true;
+				sos.siodisk(nextJob.jobNumber);
+			}
 		}else{
 			ioRunningJob = false;
 		}
+		jobMigration();			//Try Moving the job into memory
 		scheduler(a, p);
 	}
     
@@ -86,20 +100,40 @@ public class os{
 	//and you can attempt to move something from the cpuQueue to using the cpu
 	//the scheduler() only attempts to make the move if nothing is running on the cpu at the moment by looking at the boolean jobOnCPU 
 	static void Drmint(int []a, int []p){
-        System.out.println("INSIDE DMRINT");
         updateCPUused(p[5]);
-        
-        jobMovingToMemory=false;//because a job was just finished with laoding into memory*******************newly added
-  		Job job = jobBeingSwapped;
-		job.block = job.requestedBlock;
-        FreeSpaceEntry.deleteEntry(job.block, job.jobSize, freeSpaceTable);
-		cpuQueue.add(job);
-		jobsInMemory.put(job.jobNumber, job);
-        if(jobsInDrum.size()>0)
-            tryMovingJobToMemory();	// Try Moving the next job
-        
-
-
+        if(jobMovingToMemory){
+        	jobMovingToMemory = false; //because a job was just finished with laoding into memory*******************newly added
+        	Job job = jobBeingSwapped;
+        	job.superPriority = false;
+        	jobBeingSwapped = null;
+        	System.out.println("AR: Job "+job.jobNumber+" moved into Memory");
+        	job.printJob();
+    		job.block = job.requestedBlock;
+    		FreeSpaceEntry.deleteEntry(job.block, job.jobSize, freeSpaceTable);
+    		cpuQueue.add(job);
+    		jobsInMemory.put(job.jobNumber, job);
+        }else if(jobMovingOutOfMemory){
+        	jobMovingOutOfMemory = false; //because a job was just swaped out of memory
+        	Job job = jobBeingSwapped;
+        	job.superPriority = false;
+        	job.block = -1;
+        	jobBeingSwapped = null;
+        	System.out.println("AR: Job "+job.jobNumber+" moved out of Memory");
+        	job.printJob();
+        	freeSpaceTable.add(new FreeSpaceEntry(job.block, job.jobSize));
+            FreeSpaceEntry.compactBlocks(freeSpaceTable);
+            while(cpuQueue.contains(job)){
+            	cpuQueue.remove(job);
+            }
+			while(diskQueue.contains(job)){
+				diskQueue.remove(job);
+			}
+			jobsInMemory.remove(job.jobNumber);
+			drumQueue.add(job);
+			job.jobEntredTime = System.currentTimeMillis();
+        }
+        printAll();
+        jobMigration();
 		scheduler(a,p);			// try scheduling the job
 	}
 	
@@ -109,7 +143,6 @@ public class os{
 	static void Tro(int []a, int []p){
         Job job = cpuQueue.peek();
         
-        System.out.println("INSIDE TRO");
         updateCPUused(p[5]);
         
 		if(job != null){
@@ -123,7 +156,7 @@ public class os{
 				cpuQueue.add(job);	//add at tail of the queue
             }
 		}
-
+		jobMigration();			//Try Moving the job into memory
 		scheduler(a, p); //Try to schedule the next Job
 	}
 	
@@ -133,7 +166,6 @@ public class os{
 	//when a=7 then job wants to be blocked (change boolean blocked, of current job, to true
 	//or else it is called when an I/O request is done
 	static void Svc(int[] a, int[] p){
-        System.out.println("INSIDE SVC");
         updateCPUused(p[5]);
 		if(a[0]==5){
 			terminate(cpuQueue.peek().jobNumber);
@@ -155,6 +187,7 @@ public class os{
 				j.blocked = true;
 			}
 		}
+		jobMigration();			//Try Moving the job into memory
 		scheduler(a, p);
 	}
     
@@ -168,9 +201,10 @@ public class os{
 			freeSpaceTable.add(new FreeSpaceEntry(job.block, job.jobSize));
             FreeSpaceEntry.compactBlocks(freeSpaceTable);
 			cpuQueue.remove(job);
+			jobsInMemory.remove(jobID);
 			priorityInQueue[job.priority-1]--;
 		}
-        tryMovingJobToMemory();
+		jobMigration();			//Try Moving the job into memory
 	}
     
     
@@ -182,16 +216,26 @@ public class os{
 	//if space is not found, the job is added to a vector of jobs that can't fit into memory called jobsNotFitting.
 	//           and try the next highest priority job in the drum.
 	static boolean tryMovingJobToMemory(){
-        if(!jobMovingToMemory){
-            Collections.sort(jobsInDrum);
+        if(!jobMovingToMemory && !jobMovingOutOfMemory){
+            Collections.sort(drumQueue);
+            //Added to bring back the io pending job back in memory
+            Job tjob = diskQueue.peek();
+            if(tjob != null && drumQueue.contains(tjob)){
+            	drumQueue.remove(tjob);
+            	drumQueue.addFirst(tjob);
+            	tjob.superPriority = true;
+            }
+            
             int block = -1;
             boolean passedOnce = false;
             for(int i=0; i<2; i++){
-	            for(Job job : jobsInDrum){
-	            	if(priorityInQueue[job.priority-1] < maxWithSamePriority || passedOnce){
+	            for(Job job : drumQueue){
+	            	if(job.superPriority || priorityInQueue[job.priority-1] < maxWithSamePriority || passedOnce){
 		                block = findSpace(job);
 		                if(block >= 0){
-		                    jobsInDrum.remove(job);
+		                    drumQueue.remove(job);
+		                    System.out.println("AR:Will try to bring Job "+job.jobNumber+" in Memory");
+		                	job.printJob();
 		                    swapToMemory(job, block);
 		                    priorityInQueue[job.priority-1]++;
 		                    return true;
@@ -202,6 +246,25 @@ public class os{
             }
         }
         return false;
+	}
+	
+	static boolean tryMovingJobOutOfMemory(){
+		if(!jobMovingToMemory && !jobMovingOutOfMemory && jobsInMemory.size() > 3){
+			ArrayList<Job> jobs = new ArrayList<Job>(jobsInMemory.values());
+			Job.sortListBySizeAndBlocked(jobs);
+			for(int i= jobs.size()-1; i>=0; i--){
+				Job job = jobs.get(i);
+				if(!ioRunningJob || diskQueue.peek() != job){
+					System.out.println("AR:Will try to kick Job "+job.jobNumber+" out of Memory");
+		        	job.printJob();
+					swapOutOfMemory(job);
+					return true;
+				}
+				
+			}
+
+		}
+		return false;
 	}
     
 	//function takes a job passed to it(the job should be in the drum)
@@ -217,6 +280,18 @@ public class os{
 		sos.siodrum(jobInDrum.jobNumber, jobInDrum.jobSize, block, 0);
 	}
     
+	/*
+	 * It will signals the siodrum to swap a job out of memory
+	 * Once finish, another job can take the freed up memory space
+	 */
+	static void swapOutOfMemory(Job jobToSwap){
+		jobBeingSwapped = jobToSwap;
+        jobMovingOutOfMemory=true;
+		sos.siodrum(jobToSwap.jobNumber, jobToSwap.jobSize, jobToSwap.block, 1);
+	}
+	
+	
+	
 	//checks the free space table if the job passed in the argument can fit a space in the free space table
 	//returns the block/base found for it, and updates the free space table to subtract the size of the job passed to it 
 	//if nothing found, returns a block/base value of -1(this value can never be)
@@ -237,7 +312,7 @@ public class os{
 		//printAll();
         Job firstJob = cpuQueue.peek();
         Job jobToRun=firstJob;
-        while(jobToRun !=null && (jobToRun.blocked || jobToRun.killThisJob)){
+        while(jobToRun !=null && (jobToRun == jobBeingSwapped || jobToRun.blocked || jobToRun.killThisJob)){
             cpuQueue.add(cpuQueue.poll());
             jobToRun = cpuQueue.peek();
             if(jobToRun == firstJob){
@@ -253,7 +328,6 @@ public class os{
             else
                 p[4]=timeslice;
             cpuRunningJob=true;
-            
             jobToRun.lastScheduledTime = p[5];
             jobToRun.cpuTimeAdded=false;
             
@@ -266,6 +340,7 @@ public class os{
         if(cpuQueue.size()>0 && cpuQueue.peek().lastScheduledTime!=-1 && !cpuQueue.peek().blocked){
             if(!cpuQueue.peek().cpuTimeAdded){
                 cpuQueue.peek().usedTime+=time-cpuQueue.peek().lastScheduledTime;
+                lastJobKicked += time-cpuQueue.peek().lastScheduledTime;
                 cpuQueue.peek().cpuTimeAdded=true;
                 System.out.println("CPU TIME Used by job "+cpuQueue.peek().jobNumber+": "+cpuQueue.peek().usedTime);
             }
@@ -289,7 +364,7 @@ public class os{
 		System.out.print("\n\nJobs in Drum\njobNumber\tpriority\tjobSize\t"
                 + "maxCPUTime\tusedTime\tlastScheduledTime"+
                 "\tblocked\tkillThisJob\n");
-		for(Job job : jobsInDrum){
+		for(Job job : drumQueue){
 			System.out.print(job.jobInfo()+"\n");
 		}
 		
