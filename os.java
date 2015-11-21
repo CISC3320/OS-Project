@@ -8,7 +8,9 @@ public class os{
 	static LinkedList<Job> cpuQueue;//a queue of jobs on the cpuQueue
 
 	static Job jobBeingSwapped = null;	//job that is either being swapped in or out of memory
-    
+	static Job jobDoingIO = null;
+	static Job lastJobIn = null;
+	
 	static Map<Integer, Job> jobsInMemory; //is List of all the jobs in memory
     
 	
@@ -17,7 +19,7 @@ public class os{
     static boolean jobMovingToMemory=false;//true or false if a job is being moved into memory
     static boolean jobMovingOutOfMemory=false;//true or false if a job is being moved into memory
     
-    static final int timeslice=3;
+    static final int timeslice=14;	//14 111 61
     static final int maxWithSamePriority=2;
     static final int[] priorityInQueue = new int[5];
     
@@ -28,6 +30,7 @@ public class os{
 	 */
 	static void startup(){
 		sos.offtrace();
+		//sos.ontrace();
 		drumQueue=new LinkedList<Job>();
 		jobsInMemory = new HashMap<Integer, Job>();
 		cpuQueue=new LinkedList<Job>();
@@ -54,9 +57,10 @@ public class os{
         if(drumQueue.size()>0){
         	if(jobBeingSwapped == null){
         		if(!tryMovingJobToMemory()){
-        			if(lastJobKicked > 100){
-        				lastJobKicked = 0;
-        				tryMovingJobOutOfMemory();
+        			if(lastJobKicked > 1000){
+        				if(tryMovingJobOutOfMemory()){
+        					lastJobKicked = 0;
+        				}
         			}
         		}
         	}
@@ -69,28 +73,40 @@ public class os{
 	//diskQueue works in FCFS
 	//@AR Job at tob of I/O (DISK Queue) finished I/O
 	static void Dskint(int[] a, int[] p){
-        updateCPUused(p[5]);	//Update cpu time
-
+		//DirtyCode, will need to be refactord
+		String callingMethod = Thread.currentThread().getStackTrace()[2].getMethodName(); 
+		if(!callingMethod.equals("scheduler"))
+        	updateCPUused(p[5]);	//Update cpu time
 		if(ioRunningJob){
-			Job job = diskQueue.poll();	//Remove the last executed I/O job
+			Job job = jobDoingIO;
+			diskQueue.remove(job);
+			jobDoingIO = null;
+			//System.out.println("Ar: Job "+job.jobNumber+" finished IO");
 			if(job.blocked && !diskQueue.contains(job)){
 				//If this job was previously blocked until all I/O was completed, we will unblock now
 				job.blocked = false;
-			}else if (!diskQueue.contains(job) && job.killThisJob){
+			}
+			if (!diskQueue.contains(job) && job.killThisJob){
 				//Indicated if the job is ready to be killed pending all IO operations
 				terminate(job.jobNumber);
 			}
 		}
-		if(diskQueue.size() > 0){
-			Job nextJob = diskQueue.peek();
-			if(jobsInMemory.containsKey(nextJob.jobNumber) && (jobBeingSwapped == null || jobBeingSwapped != nextJob)){
-				ioRunningJob = true;
-				sos.siodisk(nextJob.jobNumber);
+		if(diskQueue.size() > 0 && !ioRunningJob){
+			for(int i = diskQueue.size()-1; i>=0; i--){
+				Job nextJob = diskQueue.get(i);	
+				if(jobsInMemory.containsKey(nextJob.jobNumber) && nextJob != jobBeingSwapped){
+					ioRunningJob = true;
+					jobDoingIO = nextJob;
+					sos.siodisk(nextJob.jobNumber);
+					break;
+				}	
 			}
+			
 		}else{
 			ioRunningJob = false;
 		}
 		jobMigration();			//Try Moving the job into memory
+		if(!callingMethod.equals("scheduler"))
 		scheduler(a, p);
 	}
     
@@ -104,35 +120,30 @@ public class os{
         if(jobMovingToMemory){
         	jobMovingToMemory = false; //because a job was just finished with laoding into memory*******************newly added
         	Job job = jobBeingSwapped;
+        	System.out.println("AR: Job "+job.jobNumber+" moved into Memory");
+        	lastJobIn = job;
+        	job.printJob();
         	job.superPriority = false;
         	jobBeingSwapped = null;
-        	System.out.println("AR: Job "+job.jobNumber+" moved into Memory");
-        	job.printJob();
-    		job.block = job.requestedBlock;
-    		FreeSpaceEntry.deleteEntry(job.block, job.jobSize, freeSpaceTable);
     		cpuQueue.add(job);
     		jobsInMemory.put(job.jobNumber, job);
         }else if(jobMovingOutOfMemory){
         	jobMovingOutOfMemory = false; //because a job was just swaped out of memory
         	Job job = jobBeingSwapped;
+        	System.out.println("AR: Job "+job.jobNumber+" moved out of Memory");
+        	job.printJob();
         	job.superPriority = false;
         	job.block = -1;
         	jobBeingSwapped = null;
-        	System.out.println("AR: Job "+job.jobNumber+" moved out of Memory");
-        	job.printJob();
-        	freeSpaceTable.add(new FreeSpaceEntry(job.block, job.jobSize));
-            FreeSpaceEntry.compactBlocks(freeSpaceTable);
+        	priorityInQueue[job.priority-1]--;
             while(cpuQueue.contains(job)){
             	cpuQueue.remove(job);
             }
-			while(diskQueue.contains(job)){
-				diskQueue.remove(job);
-			}
 			jobsInMemory.remove(job.jobNumber);
 			drumQueue.add(job);
 			job.jobEntredTime = System.currentTimeMillis();
         }
-        printAll();
+        //printAll();
         jobMigration();
 		scheduler(a,p);			// try scheduling the job
 	}
@@ -170,22 +181,24 @@ public class os{
 		if(a[0]==5){
 			terminate(cpuQueue.peek().jobNumber);
 		}else if(a[0]==6){
-			Job job = cpuQueue.poll();
-			cpuQueue.add(job);
+			Job job = cpuQueue.peek();
+			//System.out.println("Ar: Job "+job.jobNumber+" is asking for IO");
 			diskQueue.add(job);//add job on cpu to diskQueue
-			if(!ioRunningJob){
-				//This is the case when no more jobs were on io queue and we need to start the process
-				//ourselves. If there are other jobs on the queue, this job will be processed on first come, first serve.
-				Dskint(a, p);
-			}
 		}else if(a[0]==7){
 			//Job requests to be blocked
 			//First make sure that there is at least one IO request in queue fot this job
 			//If not, then ignore
 			Job j = cpuQueue.peek();
+			//System.out.println("Ar: Job "+j.jobNumber+" is asking to be blocked");
+			//printAll();
 			if(diskQueue.contains(j)){
 				j.blocked = true;
 			}
+		}
+		if(!ioRunningJob){
+			//This is the case when no more jobs were on io queue and we need to start the process
+			//ourselves. If there are other jobs on the queue, this job will be processed on first come, first serve.
+			Dskint(a, p);
 		}
 		jobMigration();			//Try Moving the job into memory
 		scheduler(a, p);
@@ -225,7 +238,12 @@ public class os{
             	drumQueue.addFirst(tjob);
             	tjob.superPriority = true;
             }
-            
+            /*
+            System.out.println("IN");
+			for(Job job: drumQueue){
+				job.printJob();
+			}
+			*/
             int block = -1;
             boolean passedOnce = false;
             for(int i=0; i<2; i++){
@@ -234,8 +252,6 @@ public class os{
 		                block = findSpace(job);
 		                if(block >= 0){
 		                    drumQueue.remove(job);
-		                    System.out.println("AR:Will try to bring Job "+job.jobNumber+" in Memory");
-		                	job.printJob();
 		                    swapToMemory(job, block);
 		                    priorityInQueue[job.priority-1]++;
 		                    return true;
@@ -251,12 +267,24 @@ public class os{
 	static boolean tryMovingJobOutOfMemory(){
 		if(!jobMovingToMemory && !jobMovingOutOfMemory && jobsInMemory.size() > 3){
 			ArrayList<Job> jobs = new ArrayList<Job>(jobsInMemory.values());
-			Job.sortListBySizeAndBlocked(jobs);
+			//Job.sortListBySizeAndBlocked(jobs);
+			/*
+			for(Job job: jobs){
+				job.printJob();
+			}
+			*/
+			//Experiment
+			//Kick out the BiggestSize Job //Bring in Smallest
+			Collections.sort(jobs);
+			/*
+			System.out.println("OUT");
+			for(Job job: jobs){
+				job.printJob();
+			}
+			*/
 			for(int i= jobs.size()-1; i>=0; i--){
 				Job job = jobs.get(i);
-				if(!ioRunningJob || diskQueue.peek() != job){
-					System.out.println("AR:Will try to kick Job "+job.jobNumber+" out of Memory");
-		        	job.printJob();
+				if(!ioRunningJob || jobDoingIO != job){
 					swapOutOfMemory(job);
 					return true;
 				}
@@ -274,8 +302,9 @@ public class os{
 	//it places the job in a queue container calle cpuQueue
 	//and since the job is no longer in the drum(backing store), it removes it from the drum
 	static void swapToMemory(Job jobInDrum, int block){
+		FreeSpaceEntry.deleteEntry(block, jobInDrum.jobSize, freeSpaceTable);
 		jobBeingSwapped = jobInDrum;
-		jobInDrum.requestedBlock=block;
+		jobInDrum.block=block;
         jobMovingToMemory=true;
 		sos.siodrum(jobInDrum.jobNumber, jobInDrum.jobSize, block, 0);
 	}
@@ -285,6 +314,10 @@ public class os{
 	 * Once finish, another job can take the freed up memory space
 	 */
 	static void swapOutOfMemory(Job jobToSwap){
+		if(jobToSwap.block>-1){
+    		freeSpaceTable.add(new FreeSpaceEntry(jobToSwap.block, jobToSwap.jobSize));
+    		FreeSpaceEntry.compactBlocks(freeSpaceTable);
+    	}
 		jobBeingSwapped = jobToSwap;
         jobMovingOutOfMemory=true;
 		sos.siodrum(jobToSwap.jobNumber, jobToSwap.jobSize, jobToSwap.block, 1);
@@ -310,9 +343,12 @@ public class os{
 	//if there isn't, pop a job of the cpu queue, and run it on the cpu by changing a[0] to 2 	
 	static void scheduler(int []a, int []p){
 		//printAll();
+		if(!ioRunningJob){
+			Dskint(a, p);
+		}
         Job firstJob = cpuQueue.peek();
         Job jobToRun=firstJob;
-        while(jobToRun !=null && (jobToRun == jobBeingSwapped || jobToRun.blocked || jobToRun.killThisJob)){
+        while(jobToRun !=null && (jobToRun.blocked || jobToRun == jobBeingSwapped || jobToRun.killThisJob)){
             cpuQueue.add(cpuQueue.poll());
             jobToRun = cpuQueue.peek();
             if(jobToRun == firstJob){
@@ -320,6 +356,8 @@ public class os{
             }
         }
         if(jobToRun!=null){
+        	//System.out.println("Ars: Scheduling "+jobToRun.jobNumber + " blocked: "+jobToRun.blocked);
+        	//jobToRun.printJob();
             a[0]=2;
             p[2]=jobToRun.block;
             p[3]=jobToRun.jobSize;
@@ -342,32 +380,30 @@ public class os{
                 cpuQueue.peek().usedTime+=time-cpuQueue.peek().lastScheduledTime;
                 lastJobKicked += time-cpuQueue.peek().lastScheduledTime;
                 cpuQueue.peek().cpuTimeAdded=true;
-                System.out.println("CPU TIME Used by job "+cpuQueue.peek().jobNumber+": "+cpuQueue.peek().usedTime);
             }
         }
     }
     
 	static void printAll(){
 		System.out.println("OS Statistics");
-		System.out.print("\n\nJobs in Cpu queue\njobNumber\tpriority\tjobSize\t"
-                         + "maxCPUTime\tusedTime\tlastScheduledTime"+
-                         "\tblocked\tkillThisJob\n");
+		System.out.print("\n\nJobs in Cpu queue\n");
 		for(Job job : cpuQueue){
-			System.out.print(job.jobInfo()+"\n");
+			job.printJob();
 		}
-		System.out.print("\n\nJobs in IO queue\njobNumber\tpriority\tjobSize\t"
-                         + "maxCPUTime\tusedTime\tlastScheduledTime"+
-                         "\tblocked\tkillThisJob\n");
+		System.out.print("\n\nJobs in IO queue\n");
 		for(Job job : diskQueue){
-			System.out.print(job.jobInfo()+"\n");
+			job.printJob();
 		}
-		System.out.print("\n\nJobs in Drum\njobNumber\tpriority\tjobSize\t"
-                + "maxCPUTime\tusedTime\tlastScheduledTime"+
-                "\tblocked\tkillThisJob\n");
+		System.out.print("\n\nJobs in Drum\n");
 		for(Job job : drumQueue){
-			System.out.print(job.jobInfo()+"\n");
+			job.printJob();
 		}
-		
+		System.out.println("\n\nFree Space Enteries");
+		for(FreeSpaceEntry fs : freeSpaceTable){
+			System.out.println(fs);
+		}
+		System.out.println("\n\nIORunninJob: "+ioRunningJob);
 		System.out.print("\n\n");
 	}
+	
 }
