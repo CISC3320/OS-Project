@@ -1,7 +1,7 @@
 import java.util.*;
 
 public class os{
-
+    
 	static LinkedList<FreeSpaceEntry> freeSpaceTable;//is a list of free spaces entrees
     
     static LinkedList<Job> jobsInDrum;//is a list of jobs in the drum
@@ -34,7 +34,7 @@ public class os{
     static boolean blockedJobSwapInProgress=false;
     static Job jobRemovedFromMemory=null;
     static Job blockedJobSwapIn=null;
-
+    
 	/*
 	 * Initialize the Variables. Think of it as power on for OS
 	 */
@@ -46,7 +46,7 @@ public class os{
 		jobsInMemory = new HashMap<Integer, Job>();
 		freeSpaceTable=new LinkedList<FreeSpaceEntry>();
 		freeSpaceTable.add(new FreeSpaceEntry(0,100));//start up free space table to contain one free space of 100k, at block 0 
-
+        
 	}
     
 	/*
@@ -88,13 +88,13 @@ public class os{
 			}
 		}
 		if(diskQueue.size() > 0){
-            //trySwappingJobBackIn();
             Collections.sort(diskQueue, new IOComparator());
             Job nextJob = diskQueue.peek();
             if(!nextJob.jobSwappedOut){
                 jobDoingIO=nextJob;
                 ioRunningJob = true;
                 sos.siodisk(nextJob.jobNumber);
+                //trySwappingJobBackIn();
             }
             else
                 ioRunningJob=false;
@@ -122,6 +122,7 @@ public class os{
                 job=blockedJobSwapIn;
                 blockedJobSwapIn=null;
                 blockedJobSwapInProgress=false;
+                FreeSpaceEntry.deleteEntry(blockedJobSwapIn.block, blockedJobSwapIn.jobSize, freeSpaceTable);
                 System.out.println("BlOCKED JOB SWAPPED IN");
             }
             else{
@@ -134,18 +135,18 @@ public class os{
             job.jobSwappedOut=false;
             job.timeEnteredIntoMemory=p[5];
             
-            if(jobMovingOutOfMemory){//means a job was waiting on move into memory to be done, to swap out
+            if(jobMovingOutOfMemory && jobBeingSwappedOut!=null){//means a job was waiting on move into memory to be done, to swap out
                 moveJobOutOfMemory(jobBeingSwappedOut); 
             }
         }
         else if(jobMovingOutOfMemory){
             if(blockedJobSwapInProgress){
-                blockedJobSwapIn.block=jobRemovedFromMemory.block;
                 jobsInMemory.remove(jobRemovedFromMemory.block);
                 cpuQueue.remove(jobRemovedFromMemory);
                 jobsInDrum.add(jobRemovedFromMemory);
                 freeSpaceTable.add(new FreeSpaceEntry(jobRemovedFromMemory.block, jobRemovedFromMemory.jobSize));
                 FreeSpaceEntry.compactBlocks(freeSpaceTable);
+                blockedJobSwapIn.block=findSpace(blockedJobSwapIn);
                 jobRemovedFromMemory=null;
                 jobMovingToMemory=true;
                 sos.siodrum(blockedJobSwapIn.jobNumber, blockedJobSwapIn.jobSize, blockedJobSwapIn.block, 0);
@@ -262,28 +263,32 @@ public class os{
 	//if space is not found, the job is added to a vector of jobs that can't fit into memory called jobsNotFitting.
 	//           and try the next highest priority job in the drum.
 	/*static boolean tryMovingJobToMemory(){
-        if(!jobMovingToMemory && !jobMovingOutOfMemory){
-            Collections.sort(jobsInDrum);
-            int block = -1;
-            boolean passedOnce = false;
-            for(int i=0; i<2; i++){
-	            for(Job job : jobsInDrum){
-	            	if(priorityInQueue[job.priority-1] < maxWithSamePriority || passedOnce){
-		                block = findSpace(job);
-		                if(block >= 0){
-		                    jobsInDrum.remove(job);
-		                    swapToMemory(job, block);
-		                    priorityInQueue[job.priority-1]++;
-		                    return true;
-		                }
-	            	}
-	            }
-	            passedOnce = true;
-            }
-        }
-        return false;
-	}*/
+     if(!jobMovingToMemory && !jobMovingOutOfMemory){
+     Collections.sort(jobsInDrum);
+     int block = -1;
+     boolean passedOnce = false;
+     for(int i=0; i<2; i++){
+     for(Job job : jobsInDrum){
+     if(priorityInQueue[job.priority-1] < maxWithSamePriority || passedOnce){
+     block = findSpace(job);
+     if(block >= 0){
+     jobsInDrum.remove(job);
+     swapToMemory(job, block);
+     priorityInQueue[job.priority-1]++;
+     return true;
+     }
+     }
+     }
+     passedOnce = true;
+     }
+     }
+     return false;
+     }*/
  	static boolean tryMovingJobToMemory(){
+        System.out.println("tryMovingJobToMemory()");
+        for(FreeSpaceEntry e: freeSpaceTable){
+            System.out.println(e);
+        }
         if(!jobMovingToMemory && !jobMovingOutOfMemory){
             Collections.sort(jobsInDrum);
             int block = -1;
@@ -332,24 +337,24 @@ public class os{
         
     }
     static void tryMovingJobOutOfMemory(){
-        if(!blockedJobRequestedSwapIn){
-           gatherIOStatistics();
-           if(totalIORequests/1.7>totalSwappedOutRequests && (totalIORequests-totalSwappedOutRequests>4)){
-               if(totalBlockedRequests-totalSwappedOutRequests>0){//check if there is at least one block requests that hasn't been swapped out
-                   for(Job job:diskQueue){
-                       if(job.blocked && !job.jobSwappedOut && job!=jobDoingIO){
-                           if(!jobMovingOutOfMemory){
-                               jobMovingOutOfMemory=true;
-                               jobBeingSwappedOut=job;
-                               jobBeingSwappedOut.jobSwappedOut=true;
-                               if(!jobMovingToMemory){
-                                   moveJobOutOfMemory(jobBeingSwappedOut);
-                               }
-                           }
-                       }
-                   }
-               }
-           }
+        if(!blockedJobRequestedSwapIn || jobsInDrum.size()>3){
+            gatherIOStatistics();
+            if(totalIORequests/1.7>totalSwappedOutRequests && (totalIORequests-totalSwappedOutRequests>3)){
+                if(totalBlockedRequests-totalSwappedOutRequests>0){//check if there is at least one block requests that hasn't been swapped out
+                    for(Job job:diskQueue){
+                        if(job.blocked && !job.jobSwappedOut && job!=jobDoingIO){
+                            if(!jobMovingOutOfMemory){
+                                jobMovingOutOfMemory=true;
+                                jobBeingSwappedOut=job;
+                                jobBeingSwappedOut.jobSwappedOut=true;
+                                if(!jobMovingToMemory){
+                                    moveJobOutOfMemory(jobBeingSwappedOut);
+                                }
+                            }
+                        }
+                    }
+                }
+            }
         }
     }
     
@@ -362,23 +367,24 @@ public class os{
     static void trySwappingJobBackIn(){
         gatherIOStatistics();
         System.out.println("trySwappingJobBackIn()");
-        if(totalIORequests-totalSwappedOutRequests<=4){
+        if(totalIORequests-totalSwappedOutRequests<=1){
             Collections.sort(diskQueue, new IOComparator());
             Job jobComingOut=null;
             Job jobComingIn=null;
             for(Job jobInDiskQueue: diskQueue){
-                if(!jobInDiskQueue.jobSwappedOut && jobDoingIO!=jobInDiskQueue){
+                if(jobInDiskQueue.jobSwappedOut){
                     jobComingIn=jobInDiskQueue;
                     jobComingIn.printJob();
                     for(Job jobInMemory: jobsInMemory.values()){
                         if(!jobInMemory.blocked && jobInMemory.jobSize>=jobInDiskQueue.jobSize){
-                            jobComingOut=jobInMemory;
-                            System.out.println("MATCH FOUND");
-                            jobComingOut.printJob();
-                            break;
+                            if(jobComingOut==null || jobInDiskQueue.jobSize>jobComingOut.jobSize)
+                                jobComingOut=jobInMemory;
                         }
                     }
                     if(jobComingOut!=null){
+                        System.out.println("MATCH FOUND");
+                        jobComingOut.printJob();
+
                         blockedJobRequestedSwapIn=true;
                         jobRemovedFromMemory=jobComingOut;
                         blockedJobSwapIn=jobComingIn;
