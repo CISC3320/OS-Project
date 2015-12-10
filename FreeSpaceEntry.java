@@ -7,16 +7,14 @@ import java.util.ListIterator;
 public class FreeSpaceEntry implements Comparable<FreeSpaceEntry>{
 	
 	public int block, size;
+    
 	/*100k size and block is numbered 0-99*/
 	FreeSpaceEntry(int block, int size){
 		this.block=block;
 		this.size=size;
 	}
 	
-	/* @toString: Always good for debugging
-	 * (non-Javadoc)
-	 * @see java.lang.Object#toString()
-	 */
+    //for testing
 	public String toString(){
 		return "Block: "+block+"\tSize: "+size;
 	}	
@@ -62,7 +60,7 @@ public class FreeSpaceEntry implements Comparable<FreeSpaceEntry>{
 			}
 		}
 	}
-
+    
 	@Override
 	public int compareTo(FreeSpaceEntry o) {
 		int comparableVar1, comparableVar2;
@@ -75,31 +73,7 @@ public class FreeSpaceEntry implements Comparable<FreeSpaceEntry>{
 		}
 		return comparableVar1 < comparableVar2 ? -1 : comparableVar1 > comparableVar2 ? 1 : 0;
 	}
-	
-	public static void main(String[] args){
-		//@ToRemove
-		//For Testing Only
-		//Should be removed from final Production
-		ArrayList<FreeSpaceEntry> test = new ArrayList<FreeSpaceEntry>();
-		test.add(new FreeSpaceEntry(5, 2));
-		test.add(new FreeSpaceEntry(0, 2));
-		test.add(new FreeSpaceEntry(13, 1));
-		test.add(new FreeSpaceEntry(15, 9));
-		test.add(new FreeSpaceEntry(7, 5));
-		test.add(new FreeSpaceEntry(79, 80));
-		test.add(new FreeSpaceEntry(24, 2));
-		test.add(new FreeSpaceEntry(12, 1));
-		System.out.println("Pre Sort");
-		for(FreeSpaceEntry e : test){
-			System.out.println(e);
-		}
-		FreeSpaceEntry.compactBlocks(test);
-		System.out.println("\nAfter Compact");
-		for(FreeSpaceEntry e : test){
-			System.out.println(e);
-		}
-	}
-
+    
 	static void deleteEntry(int block, int jobSize, LinkedList<FreeSpaceEntry> freeSpaceTable) {
 		for(FreeSpaceEntry e : freeSpaceTable){
 			if(e.block == block){
